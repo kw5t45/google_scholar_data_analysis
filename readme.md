@@ -8,6 +8,13 @@ and other **indexes** that appear in their google scholar profile.
 Author's **paper data** can also be saved, which saves important data for each one of the author's papers, such as **title, co-authors, number of citations, ID's publisher, pages, (all) authors, citations per year** and more.
 All of that data can be saved and retrieved in a JSON format file using methods in the code.
 
+### How to get and save data
+Create an Author object using their Unique google scholar ID. Creating an object takes a bit of time because the requesting process is slow.
+The average time to fetch data for an Author is 2 seconds / publication..
+Call **author.pprint_all_author_data()** method to see all of the author's fetched data, incliding their publications and information
+about them. 
+**author.save_authors_paper_data_in_json(json_file_name)** and **author.save_authors_person_data_in_json(json_file_name)** saves the fetched data in a JSON format in parameter file.
+If file doesnt exists, it is being created automatically.
 
 
 ## Analysis
