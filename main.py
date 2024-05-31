@@ -290,12 +290,7 @@ class Analysis_Tools:
         return evaluated_result
 
 
-# id enos tyxaioy me liga papers jP1qgO4AAAAJ
-# id Papakwsta O9d4j7oAAAAJ
-#tyxaios = Author('O9d4j7oAAAAJ')
-#tyxaios.save_authors_paper_data_in_json('papakostas_paper_data.json')
-#o = Analysis_Tools()
-#print(o.evaluate_function(r'exp((x-10)/4)', 1))
+
 analysis_obj = Analysis_Tools()
 tools_obj = Tools()
 e = math.e
