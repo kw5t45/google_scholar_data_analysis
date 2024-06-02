@@ -47,7 +47,7 @@ Using a different - decreasing function such as $f(x)=\exp(-x)^2$ we can have an
 and returns $$a, b, c$$ parameters for the regression function to be applied in the dataset, which is defined
 in custom_function.
 In current version based on research a function that can be used to fit the citations per year data is 
-$$  ax^be^{(-cx)}$$ with a, b, c being float values to be found in the function.
+$$ax^be^{(-cx)}$$ with a, b, c being float values to be found in the function.
 
 
 ### calculate_difference_from_mean( )
