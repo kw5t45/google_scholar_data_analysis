@@ -5,13 +5,6 @@ import sys
 import os
 import sympy as sp
 import math
-import time
-import matplotlib.pyplot as plt
-from collections import OrderedDict
-from sklearn.linear_model import LinearRegression
-from scipy.optimize import curve_fit
-import numpy as np
-
 
 class Tools:
 
@@ -34,7 +27,6 @@ class Tools:
             dic[paper[0]] = paper[-1]
 
         return dic
-
     def get_paper_params(self, scholar_id):
         '''
 
@@ -46,24 +38,16 @@ class Tools:
         name: str = author['name']
         search_query = scholarly.search_author(name)
         author = scholarly.fill(next(search_query))  # gets more data by searching by name
-        progress_bar = tqdm(total=len(author['publications']), desc="Processing", unit="iteration", leave=False)
-
         # cleaning Author's publication data
 
         publications = []
-
-        for index, value in enumerate(author['publications']):
-            # index += 251 # used for getting data in batches after changing VPN to avoid too many requests errors
-            # if index == 500:
-            #     break
+        for index, value in tqdm(enumerate(author['publications']), desc=f'Getting author {scholar_id} paper data:', total=len(author['publications'])):
             current_iterable_publication = scholarly.fill(author['publications'][index])
             # progress bar updating
-            progress_bar.update(1)
             if index % 10 == 0:
                 # Clear the line for visual effect
                 sys.stdout.write("\033[K")
                 # Re-display the progress bar
-                progress_bar.display()
             #####
             # we keep title, pub_year, citation, author_pub_id, num_citations,
             # cited_by_url,
@@ -77,10 +61,7 @@ class Tools:
             current_paper_authors: str = current_iterable_publication['bib']['author']
             current_paper_authors: list = current_paper_authors.split(" and ")
 
-            try:
-                pub_year = current_iterable_publication['bib']['pub_year']
-            except:
-                pub_year = 2010  # all values will be padded as 0 anyway
+            pub_year = current_iterable_publication['bib']['pub_year']
             citation = current_iterable_publication['bib']['citation']
             author_pub_id = current_iterable_publication['author_pub_id']
             num_citations = current_iterable_publication['num_citations']
@@ -99,20 +80,13 @@ class Tools:
             try:
                 cites_per_year = current_iterable_publication['cites_per_year']
             except KeyError:
-                cites_per_year = {}
+                cites_per_year = ['NULL']
 
             # padding 0 values in years that got no citations, from publication year up to current year
-            # Generate a list of years to add
-            years_to_add = [year for year in range(pub_year, 2024 + 1) if year not in cites_per_year]
-            # Merge the existing keys and the years to add, then sort them
-            keys = [key for key in cites_per_year.keys()]
-            for i in years_to_add:
-                keys.append(i)
-            sorted_keys = sorted(keys)
-            # Create the new dictionary with zero values for the missing years
-            new_d = {key: cites_per_year.get(key, 0) for key in sorted_keys}
 
-            cites_per_year = new_d
+            for year in range(pub_year, 2024 + 1):
+                if year not in cites_per_year:
+                    cites_per_year[str(year)] = 0
 
             try:
                 cited_id = current_iterable_publication['cites_id'][0]  # is list for some reason
@@ -123,8 +97,6 @@ class Tools:
             publication_data.append([title, pub_year, citation, author_pub_id, num_citations, cited_by_url,
                                      cited_id, pages, publisher, cites_per_year, current_paper_authors])
             publications.append(publication_data[0])
-
-        progress_bar.close()
 
         return publications
 
@@ -139,9 +111,12 @@ class Tools:
 
         author: dict = scholarly.search_author_id(scholar_id)
         name: str = author['name']
+
         search_query = scholarly.search_author(name)
         author = scholarly.fill(next(search_query))  # gets more data by searching by name
         params = []
+
+        email_domain = author['email_domain']
         affiliation: str = author['affiliation']
         interests: list = author['interests']
         citedby: int = author['citedby']
@@ -178,13 +153,16 @@ class Tools:
 
         return publications_list
 
-
 class Author:
     def __init__(self, ID):
         obj = Tools()
 
-        params = obj.get_author_params(ID)
-        paper_params = obj.get_paper_params(ID)
+        try:
+            print('Getting Authors data...')
+            params = obj.get_author_params(ID)
+            paper_params = obj.get_paper_params(ID)
+        except AttributeError:
+            raise KeyError('Invalid ID')
         self.scholar_id = ID
         self.name = params[0]
         self.affiliation = params[1]
@@ -265,14 +243,13 @@ class Author:
             with open(json_name, 'w') as file:
                 json.dump(author_data, file, indent=4)
 
-
 class Analysis_Tools:
     def __init__(self):
         pass
 
-    def weight_citations_based_on_function_of_time(self, cites_per_year_per_paper: dict, function: str) \
-            -> tuple:
-        """
+    def weight_citations_based_on_function_of_time(self, cites_per_year_per_paper: dict, function: str)\
+            -> int:
+        '''
         weighs each citation per year for a paper based on a function over time and returns the sum of all the weighted
         citations. e.g. if input funciton = e^x this function starting from publication year s.t. f(pub_year) = 1
         is multiplied by the number of citations and adds a "weight" on the citations. then the number of all
@@ -283,27 +260,24 @@ class Analysis_Tools:
 
         :param function: function to be applied to citations of each paper. function parameter uses simple syntax e.g.
         exp((x-10)/4)
-        :return: tuple contatining normal citations and
-        sum of weighted citations. e.g. if authors total citations are 4000, function will return (4000, 4100) after
+        :return: sum of weighted citations. e.g. if authors total citations are 4000, function will return 4100 after
         the function is applied to each citation and weighing it.
-        """
+        '''
         obj = Analysis_Tools()
         weighted_citations_sum = 0
-        total_citations = 0
         for paper_name, citations_per_year in cites_per_year_per_paper.items():
-            pub_year = int(next(iter(citations_per_year)))  # pub year of current paper
+            pub_year = int(next(iter(citations_per_year))) # pub year of current paper
             for year, citations in citations_per_year.items():
                 weighted_citations_sum += (citations * obj.evaluate_function(function, int(year) - pub_year))
-                total_citations += citations
-        return total_citations, weighted_citations_sum
+        return weighted_citations_sum
 
     def evaluate_function(self, func: str, x_value: float):
-        """
+        '''
 
         :param func: function of x in simple syntax e.g. exp((x-10)/4)
         :param x_value: x value
         :return: y value based on f(x)
-        """
+        '''
 
         sympy_expr = sp.sympify(func, evaluate=False)
 
@@ -314,129 +288,15 @@ class Analysis_Tools:
 
         return evaluated_result
 
-    def plot_author_citations(self, citations_per_year_per_paper, author=' ') -> None:
-        """
-        Function plots number of citations on Y axis and years after paper publication on X axis.
-        :param citations_per_year_per_paper: dicitonary of citations per year per paper
-        :return: None
-        """
 
-        x_y_pairs = []
-        # converting data to (x, y) pairs
-        for paper_name, citations_per_year in citations_per_year_per_paper.items():
-            pub_year = int(next(iter(citations_per_year)))  # pub year of current paper
-            for year, citations in citations_per_year.items():
-                pair = ((int(year) - pub_year + 1), citations)
-                x_y_pairs.append(pair)
-
-        x_values = [pair[0] for pair in x_y_pairs]
-        y_values = [pair[1] for pair in x_y_pairs]
-
-        # Plotting the data as points
-        plt.scatter(x_values, y_values, label='', s=10)  # Adjust the size as needed
-
-        # Adding labels
-        plt.xlabel('Years after paper publication')
-        plt.ylabel('Number of Citations')
-        plt.title(f'Life of paper vs Citations {author}')
-        # Setting x-axis limit to start from 0
-        plt.xlim(0)
-        plt.ylim(0)
-        plt.grid(True)  # Optional: add grid for better visualization
-        plt.show()
-
-    def find_line_of_best_fit(self, citations_per_year_per_paper, plot=True) -> tuple[float]:
-        """
-        Given an f(x) function with any parameters, we find the optimized parameters that fit best the given dataset.
-        plotting the function plots both the dataset and the function curve at the same graph.
-        ##### FUNCTION IS HARD CODED AS  a * x ** b * np.exp(-c * x) inside function definition
-
-        :param citations_per_year_per_paper: dictionary containing citations per year for each paper
-        :param plot: plot the found function or not
-        :return: list of optimized (best fit) parameters
-        """
-
-        x_y_pairs = []
-        # converting data to (x, y) pairs
-        for paper_name, citations_per_year in citations_per_year_per_paper.items():
-            pub_year = int(next(iter(citations_per_year)))  # pub year of current paper
-            for year, citations in citations_per_year.items():
-                pair = ((int(year) - pub_year + 1), citations)
-                x_y_pairs.append(pair)
-
-        # creating x, y pairs
-        x = [pair[0] for pair in x_y_pairs]
-        y = [pair[1] for pair in x_y_pairs]
-
-        for i in x:  # checking data validity
-            if i < 0:
-                raise ValueError('Some of the data is wrong. Publication year in some papers is bigger than the'
-                                 'first recorded citation year.')
-
-        obj = Analysis_Tools()
-
-        # Use curve_fit from scipy to fit the custom function
-        popt, _ = curve_fit(obj.custom_function, x, y)
-
-        if plot:
-            # Plotting
-            # Plot the dataset
-            plt.scatter(x, y, label='Dataset')
-
-            # Generate x values for the function plot
-            x_values = np.linspace(min(x), max(x), 100)
-
-            # Calculate y values using the custom function
-            y_values = obj.custom_function(x_values, popt[0], popt[1], popt[2])
-
-            # Plot the function
-            plt.scatter(x_values, y_values, label='', s=10)
-
-            plt.xlabel('X')
-            plt.ylabel('Y')
-            plt.title(f'Dataset and Best fit curve: {round(popt[0], 3)}x^({round(popt[1], 3)}) e^({round(popt[2], 3)}x)'
-                      f'')
-            plt.show()
-
-        # return optimal params
-        popt = tuple(popt)
-        return popt
-
-    def custom_function(self, x: float, a: float, b: float, c: float) -> float:
-        max_exp_argument = 700  # This is a large number to prevent overflow in np.exp
-        exp_argument = -c * x
-        exp_argument = np.clip(exp_argument, -max_exp_argument, max_exp_argument)
-        return (a * x ** b) * np.exp(exp_argument)
-
-    def calculate_difference_from_mean(self,
-                                       mean_a: float,
-                                       mean_b: float,
-                                       mean_c: float,
-                                       o_a: float,
-                                       o_b: float,
-                                       o_c: float) -> float:
-        """
-        all parameters describe a * x ** b * np.exp(-c * x) function of x.
-        :param mean_a: a of mean function
-        :param mean_b: b of --
-        :param mean_c: c of --
-        :param o_a: a of optimized parameter found through line_of_best_fit function
-        :param o_b: b --
-        :param o_c: c --
-        :return: difference of mean function integral from given function integral..
-        """
-        obj = Analysis_Tools()
-        riemman_sum = 0
-        lower_bound = 0
-        upper_bound = 1000  # should tend to infinity, set to 1000 for reducing time complexity -also it is unlikely
-        # a paper will get citations more than 1000 years later...
-        x = lower_bound
-        step = 0.01  # step should tend to 0
-        while x <= upper_bound:
-            riemman_sum += (obj.custom_function(x, mean_a, mean_b, mean_c) - obj.custom_function(x, o_a, o_b,
-                                                                                                  o_c)) * step
-            x += step
-        return riemman_sum
-
-
-
+# id enos tyxaioy me liga papers jP1qgO4AAAAJ
+# id Papakwsta O9d4j7oAAAAJ
+#tyxaios = Author('O9d4j7oAAAAJ')
+#tyxaios.save_authors_paper_data_in_json('papakostas_paper_data.json')
+#o = Analysis_Tools()
+#print(o.evaluate_function(r'exp((x-10)/4)', 1))
+# analysis_obj = Analysis_Tools()
+# tools_obj = Tools()
+# e = math.e
+# sum = analysis_obj.weight_citations_based_on_function_of_time(tools_obj.get_citations_per_year_per_paper('papakostas_paper_data.json'), fr'{e}^(-(x)^2)')
+# print(sum)
