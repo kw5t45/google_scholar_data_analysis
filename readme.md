@@ -175,55 +175,37 @@ Where:
 - **papers** is the number of all the author's publications.
 - **y_c** is the current year.
 - **c(p, n)** is the number of **citations of a paper on the n-th year** (e.g., c(10, 2018) = 114 means that the 10th paper had 114 citations in 2018).
-- **f(x)** is an increasing function of **x**, in which **f(0)=1**. For example, an exponential function like f(x) = e^{x/10}
- can be used. In this case, citations in the first year have no weight added to them, and every citation after first year is multiplied by a positive weight.
+- **f(x)** is an increasing function of **x**, in which **f(0)=1**. For example, an exponential function like $$f(x) = e^{x/10}$$
+ can be used. In this case, citations in the first year **(x = 0)** have no weight added to them, and every citation after first year is multiplied by a positive weight.
 
-##### **Note**
+##### **Important notes**
 Year of the number of citations is subtracted from the publication year before being passed into f so that f(0) = 1 for the publication year, and the following years are passed into the function as 1, 2, 3, etc.
 
-For example, using an exponential function like $f(x) = e^{x/10}$:
+**Function works for multiple publications dictionary with nested dictionaries (publications per year) as key.**
+**Mathematic function parameter is a function of x string given in latex format.**
+For example, using an exponential function like $$f(x) = e^{x/10}$$:
 - f(0) = 1, meaning **citations in the first year after a paper's publication are not weighted**.
-- f(7) \approx 2, meaning that **citations 7 years after a paper's publication are counted as 2 citations**, etc.
-
+- f(7) ~= 2, meaning that **citations 7 years after a paper's publication are counted as ~2 citations**, etc.
+- Using a function s.t. $$f(0)=1$$ and $$f\nearrow,  \forall  x\gt0$$ means that the return of the function **will always
+be greater than the input citations** (or equal in case there are no citations after the first year). 
+- Using a different - decreasing function such as $$f(x)=e^{(-x^2)}$$ we can derive an index about the author's papers being citated (mostly) in their first year after publication.
 ##### Example Usage & Example calculation
-If **$$c(10, 2018) = 114$$** and the **publication year is 2015**, we calculate:
+Let **$$c(10, 2018) = 114$$** and the **publication year = 2015**, and let $$f(x)=e^{x/10}$$ 
+We calculate:
 
 $$f(2018 - 2015) = f(3) \approx e^{3/10} \approx 1.3$$
 
 Then, the weighted citations for this year are:
 
 $$1.3 \times 114 = 148.2$$
-
-Thus, 148.2 citations are summed up instead of 114. This function is applied to every citation amount for every year, for each paper.
-
-**Conclusion**
-
-If a dataset of an author with say 4000 citations is input and this sum returns 8000 weighted citations, 
-we can tell that many of the authors paper's are **getting citations many years after being published**.
-If the sum returns a number slightly larger, say 4500 we can tell that almost all of the author's publications
-are very recent, or that most of the author's publications get no citations a few years after their publication.
-Using a function s.t. $f(0)=1$ and $f\nearrow,  \forall  x\gt0$ means that the return of the function **will always
-be greater than the input citations **. 
-Using a different - decreasing function such as $f(x)=\exp(-x)^2$ we can have an index about the author's papers being citated (mostly) in their first year after publication.
-
-## Using regression on given cites per paper dataset
- **find_line_of_best_fit( )** function takes a nested dictionary as input in  form 
-``d = {paper_name: str:{year: str:citations_per_year: int}}``
-and returns $$a, b, c$$ parameters for the regression function to be applied in the dataset, which is defined
-in custom_function.
-In current version based on research a function that can be used to fit the citations per year data is a gamma distribution function such as
-$$ax^be^{(-cx)}$$ with a, b, c being float values to be found in the function.
-
-
-### calculate_difference_from_mean( )
-Given the paremeters $a_f, b_f, c_f, a_g, b_g, c_g$ of 
-$$f(x)=g(x)= ax^be^{(-cx)}$$ (defined differently for different parameters) where $f(x)$ is the mean function of citations after x years and $g(x)$ is the function found using regression on an author's data using **find_line_of_best_fit( )**, this function returns the signed error from the mean calculated as:
-$$\int_{0}^{b}f(x)-g(x)dx$$
-where b tends to infinity. This integral returns the signed citations deviation from the mean.
-In the code the integral is calculated as a  Riemman sum and b is set equal to 1000 for optimization reasons.
-
-### plot_author_citations( )
-Takes a nested dicitonary  in  form 
-``d = {paper_name: str:{year: str:citations_per_year: int}}``
-and plots the data as dots. The x-axis represents the years after a paper's publications while the y-axis
-shows the citations of that paper, in x year.
+Thus, **148.2 citations are summed up instead of 114**. This function is applied to every citation amount for every year, for each paper, and the **sum** of these weighted citations is returned.
+##### Code example:
+```py
+# here a non increasing function is used as an example
+pubs = {'Publication 1: {'2000':10, '2001': 10}, ...} # can take many publications
+weighted_citations: float = weight_citations_based_on_function_of_time(pubs, '{e}^(-(x^2))')
+# f(0) = 1, f(1)~= 0.36, -> (10x1 + 10x0.36)
+print(weighted_citations)
+>>>
+13.6
+```
