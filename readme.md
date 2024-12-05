@@ -112,9 +112,6 @@ Author.save_authors_paper_data_in_json('output.json')
             "Bartholomew"
         ]
     },
-.
-.
-.
 ]
 ```
 #### JSON data fetching functions
@@ -126,7 +123,7 @@ Example usage and output:
 data: [list[list[]] = get_paper_data_from_json('test.json')
 print(data)
 >>>
-[['Predictive maintenance-bridging artificial intelligence and IoT', 2021, '2021 IEEE World AI IoT Congress (AIIoT), 0413-0419, 2021', 'jP1qgO4AAAAJ:u5HHmVD_uO8C', 44, '/scholar?hl=en&cites=1217316688053608473', '1217316688053608473', '0413-0419', 'IEEE', {'2021': 3, '2022': 8, '2023': 14, '2024': 18}], ['Computer vision for fire detection on UAVs—From software to hardware', 2021, 'Future Internet 13 (8), 200, 2021', 'jP1qgO4AAAAJ:u-x6o8ySG0sC', 31, '/scholar?hl=en&cites=16196886295757098336', '16196886295757098336', '200', 'MDPI', {'2021': 1, '2022': 9, '2023': 9, '2024': 12}], ['Robustly effective approaches on motor imagery-based brain computer interfaces', 2022, 'Computers 11 (5), 61, 2022', 'jP1qgO4AAAAJ:9yKSN-GCB0IC', 6, '/scholar?hl=en&cites=11237712361137843351', '11237712361137843351', '61', 'MDPI', {'2023': 4, '2024': 1, '2022': 0}], ['Benchmarking convolutional neural networks on continuous EEG signals: The case of motor imagery–based BCI', 2025, 'Brain-Computer Interfaces, 187-203, 2025', 'jP1qgO4AAAAJ:qjMakFHDy7sC', 0, 'NULL', 'NULL', '187-203', 'Academic Press', {}]]
+[['Predictive maintenance-bridging artificial intelligence and IoT', 2021, '2021 IEEE World AI IoT Congress (AIIoT), 0413-0419, 2021', 'jP1qgO4AAAAJ:u5HHmVD_uO8C', 44, '/scholar?hl=en&cites=1217316688053608473', '1217316688053608473', '0413-0419', 'IEEE', {'2021': 3, '2022': 8, '2023': 14, '2024': 18}], ...]
 ```
 
 ##### get_paper_params(id)
@@ -158,19 +155,46 @@ MLV Research Group',
 {2021: 4, 2022: 17, 2023: 27, 2024: 31}, # Citations per year
 []] # Co-authors
 ```
+##### get_citations_per_year_per_paper(json_path)
+Returns dictionary of Paper name as key, and dictionary of citations per year as value. Is callable only on json as of current version.
+```py
+foo: dict[str: dict[str: int]] = get_citations_per_year_per_paper('path.json')
+print(foo)
+>>>
+{'Predictive maintenance-bridging artificial intelligence and IoT': {'2021': 3, '2022': 8, '2023': 14, '2024': 18}, 'Computer vision for fire detection on UAVs—From software to hardware': {'2021': 1, '2022': 9, '2023': 9, '2024': 12}, 'Robustly effective approaches on motor imagery-based brain computer interfaces': {'2023': 4, '2024': 1, '2022': 0}, 'Benchmarking convolutional neural networks on continuous EEG signals: The case of motor imagery–based BCI': {}}
+```
+### Analysis functions
+##### weight_citations_based_on_function_of_time(cites_per_year_per_paper: dict[str: dict[str: int]], function: str)
 
+Using **weight_citations_based_on_function_of_time**, we can "weigh" all of the citations of an author 
+based on how **recent** the citations are compared to how **old** the paper is, using:
 
-### Weighted Citations
-Using **weight_citations_based_on_function_of_time** we can "weigh" all of the citations of an author 
-based on how **recent** the citations are, compared to how **old** the paper is, using:
 $$\sum_{p=1}^{papers}\sum_{n=y_0}^{y_c}f(n-y_n)c(p, n)$$
-Where *papers* is the number of all authors publications, $y_c$ is the current year $c(p, n)$ is the number of **citations of paper on n-th year** (e.g. $c(10, 2018) = 114$ means that the 10th paper had 114 citations in 2018),  and $f(x)$ is an increasing function  of x, in which $f(0)=1$, so the citations in the first year have no weight added to them, e.g. $\exp(x/10)$. Year of the number of citations is subtracted from publication year before
-being passed into $f$ so that $f(0)=1$ for the publication year, and the following years are passed into the 
-function as 1, 2, 3 etc.
-For example, using an exponential function like $e^{x/10}$ we have:
-$f(0)=1$, meaning **citations in the first year after a paper's publication are not weighted**,
-$f(7)=2$ (aprox.), meaning that **citations 7 years after a papers publication are counted as 2 citations**, etc.
-In practice, if $c(10, 2018) = 114$ and **publication year is 2015** we multiply by $f(2018 - 2015) = f(3) \simeq1.3*114=148.2$, meaning that 148.2 citations are summed up instead of 114. This function is applied to every citation amount on every year, for each paper.
+
+Where:
+- **papers** is the number of all the author's publications.
+- **y_c** is the current year.
+- **c(p, n)** is the number of **citations of a paper on the n-th year** (e.g., c(10, 2018) = 114 means that the 10th paper had 114 citations in 2018).
+- **f(x)** is an increasing function of **x**, in which **f(0)=1**. For example, an exponential function like f(x) = e^{x/10}
+ can be used. In this case, citations in the first year have no weight added to them, and every citation after first year is multiplied by a positive weight.
+
+##### **Note**
+Year of the number of citations is subtracted from the publication year before being passed into f so that f(0) = 1 for the publication year, and the following years are passed into the function as 1, 2, 3, etc.
+
+For example, using an exponential function like $f(x) = e^{x/10}$:
+- f(0) = 1, meaning **citations in the first year after a paper's publication are not weighted**.
+- f(7) \approx 2, meaning that **citations 7 years after a paper's publication are counted as 2 citations**, etc.
+
+##### Example Usage & Example calculation
+If **$$c(10, 2018) = 114$$** and the **publication year is 2015**, we calculate:
+
+$$f(2018 - 2015) = f(3) \approx e^{3/10} \approx 1.3$$
+
+Then, the weighted citations for this year are:
+
+$$1.3 \times 114 = 148.2$$
+
+Thus, 148.2 citations are summed up instead of 114. This function is applied to every citation amount for every year, for each paper.
 
 **Conclusion**
 
