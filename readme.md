@@ -248,13 +248,13 @@ the function will also plot $$3x^2e^{(-1x)}$$ along with authors data. For neste
 **save: bool = False:** Save plot in working directory.
 **output_directory: str = '.' :** Output directory for saving plot. By default is set to working directory.
 **file_name: str = 'author_plot.png':** Fige name to save. By default is set to ``author_plot.png``. 
-##### **Example usage and plot output**
+##### **Example usage and plot output** \
 ```py
 plot_author_citations(get_citations_per_year_per_paper('data.json'), show_regression=True, other_authors=[[100, 5, 2.5],[50, 2, 1]])
 >>>
 # output image
 ```
-![Sample Image](author_plot.png)
+![Sample Image](Figure_1.png)
 
 
 
