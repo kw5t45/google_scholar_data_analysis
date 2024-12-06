@@ -13,6 +13,7 @@ import os
 
 
 ### TO FIX
+# TO IMPLEMENT BUG CATCHING AND PARAMETER VALIDATION
 # BUG WITH PADDING CITATIONS PER YEAR DATA 1945 IN TAO WTF
 # STRINGS AS YEARS IN DICTIONARIES SHOULD BE INTEGERS
 # SOME CO AUTHORS DONT APPEAR
@@ -461,4 +462,4 @@ def plot_author_citations(cites_per_year_per_paper: Dict[str, Dict[str, int]],
     plt.show()
 
 
-plot_author_citations(get_citations_per_year_per_paper('papakostas_paper_data.json'), save=True)
+plot_author_citations(get_citations_per_year_per_paper('papakostas_paper_data.json'), save=True, show_regression=True, other_authors=[[100, 5, 2.5],[50, 2, 1]])
