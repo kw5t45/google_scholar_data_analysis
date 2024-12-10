@@ -2,7 +2,7 @@
 # Google Scholar Author Analysis
 
 ## 
-This library uses Google Scholar profiles to fetch author data, including publications, citations, and co-authors. It offers tools for weighted citation analysis, regression modeling of citation trends, and deviation analysis. Users can visualize citation data, highlighting research impact and temporal trends in scholarly citations. 
+This library uses Scholarly Library, searching Google Scholar profiles to fetch author data, including publications, citations, and co-authors. It offers tools for weighted citation analysis, regression modeling of citation trends, and deviation analysis. Users can visualize citation data, highlighting research impact and temporal trends in scholarly citations. 
 
 # Documentation
 ### Getting started - Author Class
