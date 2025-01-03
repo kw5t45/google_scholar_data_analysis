@@ -8,7 +8,8 @@ from scipy.optimize import curve_fit
 from typing import Dict, List
 import matplotlib.pyplot as plt
 import os
-from scholarly import ProxyGenerator
+from exceptions import raise_max_requests_exceeded
+
 
 # TO DO
 # Proxies i dunno if they work well see
@@ -16,8 +17,6 @@ from scholarly import ProxyGenerator
 # TO IMPLEMENT
 # citation tree?
 # -> citation graph
-
-
 
 
 def get_citations_per_year_per_paper(json_name: str) -> dict:
@@ -66,21 +65,30 @@ def check_dictionary_format(d: Dict[str, Dict[str | int, int]]) -> bool:
 
 def get_paper_params(scholar_id):
     '''
-
+    Given a Unique google scholar profile ID this function fetches paper data which are described below.
     :param scholar_id:
     :return: (papers)  [title, pub_year, citation, author_pub_id, num_citations, cited_by_url,
                                  cited_id, pages, publisher, cites_id, cites_per_year]
     '''
-    author: dict = scholarly.search_author_id(scholar_id)
+    try:
+        author: dict = scholarly.search_author_id(scholar_id)
+    except:
+        raise_max_requests_exceeded()
     name: str = author['name']
-    search_query = scholarly.search_author(name)
-    author = scholarly.fill(next(search_query))  # gets more data by searching by name
+    try:
+        search_query = scholarly.search_author(name)
+        author = scholarly.fill(next(search_query))  # gets more data by searching by name
+    except:
+        raise_max_requests_exceeded()
     # cleaning Author's publication data
 
     publications = []
-    for index, value in tqdm(enumerate(author['publications']), desc=f'Getting author {scholar_id} paper data:',
+    for index, value in tqdm(enumerate(author['publications']), desc=f'Getting author {scholar_id} paper data',
                              total=len(author['publications'])):
-        current_iterable_publication = scholarly.fill(author['publications'][index])
+        try:
+            current_iterable_publication = scholarly.fill(author['publications'][index])
+        except:
+            raise_max_requests_exceeded()
         # progress bar updating
         if index % 10 == 0:
             # Clear the line for visual effect
@@ -96,9 +104,11 @@ def get_paper_params(scholar_id):
         title = author['publications'][index]['bib']['title']
         if title == 'REVIEWERS LIST A':  # vgazei san teleytaio paper kati periergo gia ayto to kanw hardcode
             break
-        current_paper_authors: str = current_iterable_publication['bib']['author']
-        current_paper_authors: list = current_paper_authors.split(" and ")
-
+        try:
+            current_paper_authors: str = current_iterable_publication['bib']['author']  # NOQA
+            current_paper_authors: list = current_paper_authors.split(" and ")
+        except KeyError:
+            current_paper_authors: List = []
         try:
             pub_year = current_iterable_publication['bib']['pub_year']
         except KeyError:
@@ -152,7 +162,6 @@ def get_paper_params(scholar_id):
         publication_data.append([title, pub_year, citation, author_pub_id, num_citations, cited_by_url,
                                  cited_id, pages, publisher, cites_per_year, current_paper_authors])
         publications.append(publication_data[0])
-
     return publications
 
 
@@ -167,9 +176,11 @@ def get_author_params(scholar_id):
 
     author: dict = scholarly.search_author_id(scholar_id)
     name: str = author['name']
-
-    search_query = scholarly.search_author(name)
-    author = scholarly.fill(next(search_query))  # gets more data by searching by name
+    try:
+        search_query = scholarly.search_author(name)
+        author = scholarly.fill(next(search_query))  # gets more data by searching by name
+    except:
+        raise_max_requests_exceeded()
     params = []
 
     email_domain = author['email_domain']
@@ -442,4 +453,143 @@ def plot_author_citations(cites_per_year_per_paper: Dict[str, Dict[str | int, in
 
     plt.show()
 
-# plot_author_citations(get_citations_per_year_per_paper('papakostas_paper_data.json'), save=True, show_regression=True, other_authors=[[100, 5, 2.5],[50, 2, 1]])
+
+def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar') -> None:
+    """
+    Creates nested file in form:
+    folder: parameter_author which contains a json with author data (and publication data) and a nested folder
+    co-authors: a folder containing json files with co-authors data of parameter author.
+    Because a lot of the requests get timed out and i cant figoure out proxies as of current version, this function saves
+    fetched data and if it crashes, it can be called again and continue the process on the half saved folder. this
+    theoretically could be continued for level 2 and so on trees, however it would take exponentially more time and
+    we would get requests denied. As of current version depth is equal to 1.
+    Example output folder format:
+    - ID_author
+    --- author_name_author_data.json
+    --- author_name_paper_data.json
+    --- ID_co-author
+    ----- co_author_name_author_data.json
+    ----- co_author_name_paper_data.json
+    --- ID_2nd_co-author
+    Note:
+    - in author data for each entity (co-author) we do not include their co-authors as IDs but as names only.
+    This is beacuse the names of co-authors are taken from publications, but to get IDs the names must be searched
+    one by one, and this takes a LOT of time. Thus in graph analysis we use names, not IDs.
+    - make sure input path folder is empty, or has data that were saved if the code had stopped. If folder was not empty
+    the code assumes that it must "continue" the data fetching process and will break.
+    :param id: Author ID
+    :return:
+    """
+    # to avoid circular import crash
+    import classes as gs
+
+    # file already exists boolean, we assume file does not exist. If it does (code crashed somepoint) the code works
+    # normally.
+    exists = False
+
+    output_folder = f'{id}'
+
+    if full_path != 'bar':
+        output_folder = os.path.join(output_folder, full_path)
+
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"Parent folder {output_folder} created successfully.")
+    else:
+        print(f"Folder {output_folder} already exists, proceeding to continue fetching data.")
+        exists = True
+        if not os.listdir(output_folder):  # Empty folder has no items - process stopped in parent folder data fetching
+            print(f"The folder '{output_folder}' is empty (Process might have stopped in author data fetching).\n"
+                  f"(re)starting parent folder process: ")
+            exists = False  # restarting process
+    if not exists:
+        author: gs.Author = gs.Author(id)
+
+        # HERE MAKE IT FULL PATH, NOT STARTING WITH ID here parent folder will have ID as name, since it is created
+        # before fetching data (name). I could rename it later.
+        author.save_authors_paper_data_in_json(
+            f'{id}/{author.name.replace(" ", "_").lower()}_paper_data.json')  # NOQA, if code reaches here author var exists
+        author.save_authors_person_data_in_json(f'{output_folder}/{author.name.replace(" ", "_").lower()}_author_data.json')
+
+        # creating a .json file with co-author IDs. This will be later helpful for continuing the search if the code
+        # breaks when searching a co-author.
+        co_authors_list_file = os.path.join(output_folder, "co_authors.json")
+        with open(co_authors_list_file, 'w') as f:
+            json.dump(author.co_author_ids, f)
+
+        # here we create a clone file, so that we can pop IDs and also keep track of progress (if code stops)
+        co_authors_list_file__ = os.path.join(output_folder, "co_authors_to_search.json")
+        with open(co_authors_list_file__, 'w') as f:
+            json.dump(author.co_author_ids, f)
+    # here the code is most likely to fail and exceed max tries. ##
+
+    # in this point the ID author folder is
+    # - ID_author
+    # --- author_name_author_data.json
+    # --- author_name_paper_data.json
+    # we make the folder a tree in this form (for comment simplicity, here author has only 2 co-authors):
+    # > ID_author
+    # >>> co_authors.json
+    # >>> co_authors_to_remove.json
+    # >>> author_name_author_data.json
+    # >>> author_name_paper_data.json
+    # >>> ID_co-author
+    # >>>>> co_author_name_author_data.json
+    # >>>>> co_author_name_paper_data.json
+    # >>> ID_2nd_co-author
+    # ...
+    # this way we can create a simple nested folder which can work as a tree, and we can retrieve data and perform
+    # analysis later.
+    # this function could be called recursively, however in current version i dont do that as i dont think it is needed.
+    # recursion would be ideal when building trees of bigger depth, however this is nearly impossible with current
+    # data fetching library.
+
+    # get length of all authors to be searched, if code is re-excecuted some of them have already been searched.
+    with open(f'{os.path.join(output_folder)}\\co_authors.json', 'r') as f:
+        ids = json.load(f)
+    co_authors_number = len(ids)
+
+    with open(f'{output_folder}\\co_authors_to_search.json', 'r') as f:
+        ids = json.load(f)
+    co_authors_current = len(ids)
+
+    progress = 0
+    if exists:
+        progress = round(100 * (co_authors_number - co_authors_current) / co_authors_number)
+        print(f'Total progress: {progress}%.')
+
+    # here we use a copy of IDs list because we remove each iterated ID from the list.
+    for co_author_id in ids[:]:
+
+        # creating nested folder in parent folder
+        try:
+            os.makedirs(f'{os.path.join(output_folder, co_author_id)}')
+        except FileExistsError:
+            pass
+        try:
+            co_author: gs.Author = gs.Author(co_author_id, get_co_authors=False)
+        except:
+            raise_max_requests_exceeded()
+        co_author.save_authors_paper_data_in_json( # NOQA, if code reaches here co_author var exists
+            f'{output_folder}\\{co_author_id}\\{co_author.name.replace(" ", "_").lower()}_paper_data.json')
+        co_author.save_authors_person_data_in_json(
+            f'{output_folder}\\{co_author_id}\\{co_author.name.replace(" ", "_").lower()}_author_data.json')
+
+        ids.remove(co_author_id)
+        co_authors_current = len(ids)
+        with open(f'{output_folder}\\co_authors_to_search.json', 'w') as f:
+            json.dump(ids, f)
+        progress = round(100 * (co_authors_number - co_authors_current) / co_authors_number)
+        print(f'Total progress: {progress}%.')
+
+    # when all data is fetched we remove useless json files from folder
+    if int(progress) == 100:
+        co_authors_json = os.path.join(output_folder, "co_authors.json")
+        if os.path.exists(co_authors_json):
+            os.remove(co_authors_json)
+        co_authors_to_search_json = os.path.join(output_folder, "co_authors_to_search.json")
+        if os.path.exists(co_authors_to_search_json):
+            os.remove(co_authors_to_search_json)
+
+        print(f'{id} co-author tree saved successfully.')
+

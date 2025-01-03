@@ -4,19 +4,20 @@ import os
 import json
 from colorama import Fore, Style, init
 from typing import Dict, List
-from scholarly import ProxyGenerator
-
+from tqdm import tqdm
 
 
 class Author:
-    def __init__(self, ID):
+    def __init__(self, ID, get_co_authors=True):
         try:
             init()
-            print(f"{Fore.RED}Getting author {ID} data...{Style.RESET_ALL}", end='', flush=True)
+            print(f"{Fore.RED}Getting author {ID} data...{Style.RESET_ALL}", end='\n', flush=True)
             params = get_author_params(ID)
+            print('Author data fetched successfully.')
             # to clear output
             # os.system('cls' if os.name == 'nt' else 'clear')
             paper_params = get_paper_params(ID)
+            print('Paper data fetched successfully.')
 
         except AttributeError:
             raise KeyError('Invalid ID.')
@@ -53,20 +54,26 @@ class Author:
 
         # converting to set in case of many publications with same authors
         self.co_authors: set[str] = set(co_authors)
+        # json cant save sets for some reason :(
+        self.co_authors = list(self.co_authors)
 
         co_author_ids  = []
-        # getting co-authors ids
-        for co_author in self.co_authors:
-            search_query = scholarly.search_author(co_author)
-            # Retrieve the first result from the iterator
-            try:
-                first_author_result = next(search_query)
-            except StopIteration:
-                break
-            # Retrieve all the details for the author
-            author = scholarly.fill(first_author_result)
-            co_author_ids.append(author['scholar_id'])
+        # code gets stuck here in tree searching co authors, therefore i parameterize this, also checking length
+        # to handle crashing
+        # this code takes name as co_authors and tries to find the Unique IDs by searching.
+        if get_co_authors and len(self.co_authors) != 0:
+            for co_author in tqdm(self.co_authors, desc="Getting Co-Author ID's ", total=len(self.co_authors)):
+                search_query = scholarly.search_author(co_author)
+                # Retrieve the first result from the iterator
+                try:
+                    first_author_result = next(search_query)
+                except StopIteration:
+                    continue
+                # Retrieve all the details for the author
+                author = scholarly.fill(first_author_result)
+                co_author_ids.append(author['scholar_id'])
         self.co_author_ids: List[str] = co_author_ids
+        print("Co-Author ID's fetched successfully.")
 
     def pprint_all_author_data(self, show_publications=True) -> None:
 
@@ -89,7 +96,8 @@ class Author:
 
     def save_authors_paper_data_in_json(self, json_name=None):
         if json_name is None:
-            json_name = self.name + '.json'
+            json_name = (self.name + '.json').replace(' ', '_')
+
         elif '.json' not in json_name:
             raise ValueError('Path should end in .json.')
 
@@ -111,6 +119,7 @@ class Author:
             with open(json_name, 'w') as file:
                 json.dump(formatted_data, file, indent=4)
         else:
+            print(f'{json_name} already exists. Proceeding to add the data in path json.')
             with open(json_name, 'w') as file:
                 json.dump(formatted_data, file, indent=4)
 

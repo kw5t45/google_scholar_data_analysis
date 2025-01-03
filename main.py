@@ -1,33 +1,28 @@
 from analysis import *
-import classes as gs
-import math
-from scholarly import ProxyGenerator
-import random
+# TO DO *************************************
+# type hint EVERYTHING
+# test
+# check for exception messages
+# GENERALIZE PATHS IN SAVE AUTHOR TREE
+# make tree depth parameter = 2
+# add src (and core?) folders
+# set txt file {}
+# check for errors in dynamic
+# make error case for dicitonary type hint
+# verbrose parameter, suppress output
+# ULTIMATE: FIND ERDOS NUMBER FUNCTION
 
-# List of proxies (replace with actual proxies you have access to)
-proxies_list = [
-    'http://proxy1:port',
-    'http://proxy2:port',
-    'http://proxy3:port'
-]
+# QUESTIONS FOR DASKALO *************
+# vebrose
+# how to handle exceptions
+# core? src?
+# testing genikotera
+# custom type hint? eg dict[dict[list[.....]]]]
 
-# Function to get a random proxy from the list
-def get_random_proxy():
-    return random.choice(proxies_list)
 
-# Setup proxy
-proxies = {
-    'http': get_random_proxy(),
-    'https': get_random_proxy(),
-}
 
 # few papers jP1qgO4AAAAJ
 # papak id O9d4j7oAAAAJ
 
-inst: gs.Author = gs.Author('O9d4j7oAAAAJ')
-print(inst.co_author_ids)
-inst.pprint_all_author_data(show_publications=False)
-#inst.co_author_ids.remove('O9d4j7oAAAAJ')
-for id in inst.co_author_ids:
-    x = gs.Author(id)
-    x.pprint_all_author_data()
+checkpoint_save_author_and_coauthors_in_tree('O9d4j7oAAAAJ')
+
