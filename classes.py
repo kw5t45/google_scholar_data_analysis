@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 
 class Author:
-    def __init__(self, ID, get_co_authors=True):
+    def __init__(self, ID, get_co_authors=True, clip=-1):
         try:
             init()
             print(f"{Fore.RED}Getting author {ID} data...{Style.RESET_ALL}", end='\n', flush=True)
@@ -16,7 +16,7 @@ class Author:
             print('Author data fetched successfully.')
             # to clear output
             # os.system('cls' if os.name == 'nt' else 'clear')
-            paper_params = get_paper_params(ID)
+            paper_params = get_paper_params(ID, clip)
             print('Paper data fetched successfully.')
 
         except AttributeError:

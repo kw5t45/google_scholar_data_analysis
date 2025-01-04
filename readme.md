@@ -2,7 +2,17 @@
 # Google Scholar Author Analysis
 
 ## 
-This library uses Scholarly Library, searching Google Scholar profiles to fetch author data, including publications, citations, and co-authors. It offers tools for weighted citation analysis, regression modeling of citation trends, and deviation analysis. Users can visualize citation data, highlighting research impact and temporal trends in scholarly citations. 
+This library searches Google Scholar profiles to fetch author data, including publications, citations, and co-authors. It offers tools for weighted citation analysis, regression modeling of citation trends, and deviation analysis, and graph visualizations. Whith Scholar analysis, we can visualize citation connections and much more.
+
+**Important note** 
+This library uses Scholarly library to scrape the data from Google Scholar links. There fore, data fetching process
+is very slow and for larger data (e.g. getting & plotting an Author and their co-authors), the process takes a lot of time.
+Thus this library focuses on getting individual author - paper data and performing analysis on them, and not on getting big data. 
+
+## Installation
+After installing, run 
+`pip install -r /path/to/requirements.txt`
+to download all requirements.
 
 # Documentation
 ### Getting started - Author Class
@@ -30,7 +40,7 @@ self.co_authors: list[str] # Co-Authors
 self.publications: list[list[]] # List of publications, and data for each publication, such as _______
 ```
 
-### Author Class methods
+## Author Class methods
 #### pprint_all_author_data(showpublications=True):
 Pretty prints all fetched autor's data, showing publications based on parameter (set to True by default).
 Example usage:
@@ -115,8 +125,37 @@ Author.save_authors_paper_data_in_json('output.json')
     },
 ]
 ```
-#### JSON data fetching functions
+## JSON data fetching functions
+#### **checkpoint_save_author_and_coauthors_in_tree(identifier: str, full_path: str = None, clip: int=-1) -> None**
+**param: identifier:** Unique Google Scholar profile ID
+**param: full_path:** Directory in which the folder will be saved. By default set to working directory.
+**param: clip** Number of Papers to fetch for each Co-author. By default all papers are fetched. Most of times if an author has more than 500 publications the code will throw MaxTriesExceeded Error (request denied). There fore the clip parameter is used to fetch N papers from every co-author (Including original - root author).
+
+Saves co-author relationship tree in a folder. Depth of tree is hard-coded at 2, but this function can be called recursively
+to increase depth. Note however that more depth takes exponentially more time.
+Output folder example:
+```py
+RootAuthorFolderID # folder
+---author_name_author_data.json           # json file in save_authors_person_data_in_json() format 
+---author_name_paper_data.json            # json file in save_authors_paper_data_in_json() format 
+---CoAuthor1ID                            # folder
+-----co_author1_name_author_data.json     # ---
+-----co_author1_name_paper_data.json
+---CoAuthor2ID
+-----co_author2_name_author_data.json
+-----co_author2_name_paper_data.json
+```
+By default, if we consider the root of the tree (depth=0) to be the original parameter Author, the depth=1 co-authors are saved
+inside the folders, and the depth=2 co-authors are **saved inside json files**.
+Note that after the function is successfully finished, we can iterate through each-subfolder and call the function
+on each subfolders name, increasing depth by 1. As mentioned, this will take an enormous amount of time.
+**Note:** When calling this function, it is most likely that the code will, at some point, break because of MaxTriesExceeded
+exception. At this point, every (fetched) folder is saved in the folder, and when IP is changed and function is re-called, 
+the process will continue from that point, displaying a progress percentage.
+
+
 #### **get_paper_data_from_json(path) -> list**
+
 Given a json file created with *save_authors_paper_data_in_json* method, returns a nested list of basic data for each publication.
 **Note these are functions and not a static methods on Author Class**
 Example usage and output:
@@ -164,7 +203,30 @@ print(foo)
 >>>
 {'Predictive maintenance-bridging artificial intelligence and IoT': {'2021': 3, '2022': 8, '2023': 14, '2024': 18}, 'Computer vision for fire detection on UAVs—From software to hardware': {'2021': 1, '2022': 9, '2023': 9, '2024': 12}, 'Robustly effective approaches on motor imagery-based brain computer interfaces': {'2023': 4, '2024': 1, '2022': 0}, 'Benchmarking convolutional neural networks on continuous EEG signals: The case of motor imagery–based BCI': {}}
 ```
-### Analysis functions
+# Analysis functions
+#### **get_co_author_graph_pairs(path: str) -> List[List[str]]**
+**param: path:** path of tree folder, as created from checkpoint_save_author_and_coauthors_in_tree function.
+**return:** List of co-author relationship pairs.
+Takes a folder as input and returns co-author pairs in a list. 
+Example Usage:
+```py
+A # folder
+---author_name_author_data.json           # json file in save_authors_person_data_in_json() format 
+---author_name_paper_data.json            # json file in save_authors_paper_data_in_json() format 
+---B                                      # folder
+-----co_author1_name_author_data.json     # In here, there are co-authors E and K
+-----co_author1_name_paper_data.json
+---C
+-----co_author2_name_author_data.json     # in here, there are co-authoer G and K
+-----co_author2_name_paper_data.json
+print(get_co_author_graph_pairs('path\to\A'))
+>>>
+[[A, B],   [A, C],   [B,E],   [B, K],   [C,G],    [C,K]]
+# NOTE THAT                     ///                 ///
+# K is a co-author (child) of B and C. There fore when later plotted, this does not always result in a tree but 
+# a graph. 
+```
+
 #### **weight_citations_based_on_function_of_time(cites_per_year_per_paper: dict[str: dict[str: int]], function: str) -> float**
 
 Using **weight_citations_based_on_function_of_time**, we can "weigh" all of the citations of an author 
@@ -211,6 +273,17 @@ print(weighted_citations)
 >>>
 13.6
 ```
+#### plot_co_author_graph(co_author_pairs: List[List[str]], **kwargs) -> None
+**param: co_author_pairs:** List of Lists (pairs) as returned from get_co_author_graph_pairs() function.<br>
+**param: kwargs:** key word arguements to be passed into networkx.draw() function, which eventually plots the graph as shown below.
+
+Example usage and output:
+```py
+plot_co_author_graph(get_co_author_graph_pairs('unique_id')) # assuming unique_id is a folderthat exists 
+# in working directory
+>>> # here the graph is huge so I took a small screenshot. 
+```
+![Sample Image](example_graph.png)
 
 
  #### **get_gamma_distribution_best_fit_parameters(cites_per_year_per_paper) -> Tuple** 
@@ -254,7 +327,7 @@ plot_author_citations(get_citations_per_year_per_paper('data.json'), show_regres
 >>>
 # output image
 ```
-![Sample Image](Figure_1.png)
+![Sample Image](author_plot.png)
 
 
 

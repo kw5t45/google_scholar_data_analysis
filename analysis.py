@@ -5,18 +5,11 @@ import sys
 import sympy as sp
 import numpy as np
 from scipy.optimize import curve_fit
-from typing import Dict, List
-import matplotlib.pyplot as plt
+from typing import List, Dict, Tuple
 import os
-from exceptions import raise_max_requests_exceeded
-
-
-# TO DO
-# Proxies i dunno if they work well see
-# set verbrose to object creation, make tqdm bars better
-# TO IMPLEMENT
-# citation tree?
-# -> citation graph
+from exceptions import raise_max_requests_exceeded, check_dictionary_format
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 def get_citations_per_year_per_paper(json_name: str) -> dict:
@@ -42,31 +35,12 @@ def get_citations_per_year_per_paper(json_name: str) -> dict:
     return dic
 
 
-def check_dictionary_format(d: Dict[str, Dict[str | int, int]]) -> bool:
-    if not isinstance(d, dict):
-        return False
-
-    for key, value in d.items():
-        # Check if the key is a string
-        if not isinstance(key, str):
-            return False
-
-        # Check if the value is a dictionary
-        if not isinstance(value, dict):
-            return False
-
-        # Check if all keys in the nested dictionary are strings and values are integers
-        for inner_key, inner_value in value.items():
-            if not isinstance(inner_key, str | int) or not isinstance(inner_value, int):
-                return False
-
-    return True
-
-
-def get_paper_params(scholar_id):
+def get_paper_params(scholar_id, clip: int=-1):
     '''
     Given a Unique google scholar profile ID this function fetches paper data which are described below.
     :param scholar_id:
+    :param clip: number of publications to be returned. This is because after ~700 publications with a fresh ip we get
+    requests denied error.
     :return: (papers)  [title, pub_year, citation, author_pub_id, num_citations, cited_by_url,
                                  cited_id, pages, publisher, cites_id, cites_per_year]
     '''
@@ -83,6 +57,10 @@ def get_paper_params(scholar_id):
     # cleaning Author's publication data
 
     publications = []
+    # keeping only first <clip> publications
+    if clip != -1:
+        author['publications'] = author['publications'][:clip]
+
     for index, value in tqdm(enumerate(author['publications']), desc=f'Getting author {scholar_id} paper data',
                              total=len(author['publications'])):
         try:
@@ -182,18 +160,61 @@ def get_author_params(scholar_id):
     except:
         raise_max_requests_exceeded()
     params = []
+    # here we try except everything because google returns random stuff, doesnt return none so we must hard-code them
+    # in case they dont appear
+    try:
+        email_domain: str = author['email_domain']
+    except KeyError:
+        email_domain: str = 'No Email found'
+    try:
+        affiliation: str = author['affiliation']
+    except KeyError:
+        affiliation: str = 'No Affiliation found'
 
-    email_domain = author['email_domain']
-    affiliation: str = author['affiliation']
-    interests: list = author['interests']
-    citedby: int = author['citedby']
-    cited_by_5y = author['citedby5y']
-    h_index = author['hindex']
-    h_index_5y = author['hindex5y']
-    i10_index = author['i10index']
-    i10_index_5y = author['i10index5y']
-    cites_per_year: dict = author['cites_per_year']
-    co_authors = author['coauthors']
+    try:
+        interests: list = author['interests']
+    except KeyError:
+        interests: list = []
+
+    try:
+        citedby: int = author['citedby']
+    except KeyError:
+        citedby: int = 0
+
+    try:
+        cited_by_5y: int = author['citedby5y']
+    except KeyError:
+        cited_by_5y: int = 0
+
+    try:
+        h_index: int = author['hindex']
+    except KeyError:
+        h_index: int = 0
+
+    try:
+        h_index_5y: int = author['hindex5y']
+    except KeyError:
+        h_index_5y: int = 0
+
+    try:
+        i10_index: int = author['i10index']
+    except KeyError:
+        i10_index: int = 0
+
+    try:
+        i10_index_5y: int = author['i10index5y']
+    except KeyError:
+        i10_index_5y: int = 0
+
+    try:
+        cites_per_year: dict = author['cites_per_year']
+    except KeyError:
+        cites_per_year: dict = {}
+
+    try:
+        co_authors: list = author['coauthors']
+    except KeyError:
+        co_authors: list = []
     params.append([name, affiliation, interests, citedby, cited_by_5y, h_index, h_index_5y, i10_index,
                    i10_index_5y, cites_per_year, co_authors])
     return params[0]
@@ -372,89 +393,7 @@ def calculate_difference_from_mean(a1: float | int,
     return riemman_sum
 
 
-def plot_author_citations(cites_per_year_per_paper: Dict[str, Dict[str | int, int]],
-                          show_regression: bool = False,
-                          other_authors: List[float] | List[List[float]] = None,
-                          save: bool = False,
-                          output_directory: str = '.',
-                          file_name: str = 'author_plot.png') -> None:
-    """
-    Scatter plots authors citations per year. Can also fit gamma distribution curve and plot it.
-    Can also plot other authors distributions curves given their function coefficients.
-    Note: when taking coefficients for different authors, x-axis limit will be set to
-    parameter authors oldest paper.
-    :param cites_per_year_per_paper: nested dictionary with cites per year for each paper
-    :param save: save figure plot
-    :param show_regression: calculate and show gamma distribution curve fit on authors data
-    :param other_authors: list of coefficitients for other gamma distributions
-    :param output_directory: output directory of plot if save is set to True
-    :param file_name: output file name.png
-
-    :return: nothing
-
-    """
-    assert check_dictionary_format(cites_per_year_per_paper), r"Invalid dictionary format. Dictionary should match " \
-                                                              r"get_citations_per_year_per_paper function's output " \
-                                                              r"format."
-
-    matrix: List[List[int]] = [list(inner_dict.values()) for inner_dict in cites_per_year_per_paper.values()]
-
-    # plotting regular data
-    for index, row in enumerate(matrix):
-        x = range(len(row))
-        plt.scatter(x, row, color='blue')
-
-    # creating best curve fit and plotting it on same plot
-    # ---- finding oldest paper (x-axis limit)
-    step = 0.001
-    max_ = len(matrix[0])
-    for index, row in enumerate(matrix):
-        if len(row) > max_:
-            max_ = len(row)
-
-    # x_values = [0.001, 0.002 ...
-    x_values: List[float] = [round(step, 4) for step in np.arange(0, max_, step)]
-    y_values: List[float] = []
-    if show_regression:
-        # creating data to plot
-        a, b, c = get_gamma_distribution_best_fit_parameters(cites_per_year_per_paper)
-        for value in x_values:
-            y_values.append(round(curve_model(value, a, b, c), 3))
-        # plotting on same plot
-        plt.plot(x_values, y_values, color='red')
-
-    if not (other_authors is None):
-        # other authors coefficients can be a nested list or a single list
-        # eg [1, 2, 3] (1 author) or [[1,2,3],[2,3,4]...] (2+ authors)
-        if isinstance(other_authors[0], int | float):
-            y_values = []
-            for value in x_values:
-                y_values.append(round(curve_model(value, other_authors[0], other_authors[1], other_authors[2]), 3))
-            plt.plot(x_values, y_values, color='green')
-        else:
-            # nested lists case
-            # using different colours for each plot
-            colors = ['green', 'orange', 'red', 'blue', 'purple']
-            for index, row in enumerate(other_authors):
-                y_values = []
-                for value in x_values:
-                    y_values.append(round(curve_model(value, row[0], row[1], row[2]), 3))
-                plt.plot(x_values, y_values, color=colors[index % len(colors)])
-    if save:  # if output directory is not set to something it will save in working directory
-        if not os.path.exists(output_directory):
-            os.makedirs(output_directory)
-
-        filepath = os.path.join(output_directory, file_name)
-        plt.savefig(filepath)
-
-    plt.xlabel('Years after paper publication')
-    plt.ylabel('Citations in year')
-    plt.title('Citations per year distribution')
-
-    plt.show()
-
-
-def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar') -> None:
+def checkpoint_save_author_and_coauthors_in_tree(identifier: str, full_path: str = 'bar', clip: int=-1) -> None:
     """
     Creates nested file in form:
     folder: parameter_author which contains a json with author data (and publication data) and a nested folder
@@ -477,8 +416,12 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
     one by one, and this takes a LOT of time. Thus in graph analysis we use names, not IDs.
     - make sure input path folder is empty, or has data that were saved if the code had stopped. If folder was not empty
     the code assumes that it must "continue" the data fetching process and will break.
-    :param id: Author ID
+    :param identifier: unique author ID
+    :param full_path: full path of folder, working directory by default
+    :param clip: number of publications to be returned. This is beacuse after ~700 publications with a fresh IP the code
+    still crashes.
     :return:
+
     """
     # to avoid circular import crash
     import classes as gs
@@ -487,7 +430,7 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
     # normally.
     exists = False
 
-    output_folder = f'{id}'
+    output_folder: str = f'{identifier}'
 
     if full_path != 'bar':
         output_folder = os.path.join(output_folder, full_path)
@@ -503,13 +446,15 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
                   f"(re)starting parent folder process: ")
             exists = False  # restarting process
     if not exists:
-        author: gs.Author = gs.Author(id)
+
+        author: gs.Author = gs.Author(identifier, clip=clip)
 
         # HERE MAKE IT FULL PATH, NOT STARTING WITH ID here parent folder will have ID as name, since it is created
         # before fetching data (name). I could rename it later.
         author.save_authors_paper_data_in_json(
-            f'{id}/{author.name.replace(" ", "_").lower()}_paper_data.json')  # NOQA, if code reaches here author var exists
-        author.save_authors_person_data_in_json(f'{output_folder}/{author.name.replace(" ", "_").lower()}_author_data.json')
+            f'{output_folder}/{author.name.replace(" ", "_").lower()}_paper_data.json')  # NOQA, if code reaches here author var exists
+        author.save_authors_person_data_in_json(
+            f'{output_folder}/{author.name.replace(" ", "_").lower()}_author_data.json')
 
         # creating a .json file with co-author IDs. This will be later helpful for continuing the search if the code
         # breaks when searching a co-author.
@@ -546,17 +491,17 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
 
     # get length of all authors to be searched, if code is re-excecuted some of them have already been searched.
     with open(f'{os.path.join(output_folder)}\\co_authors.json', 'r') as f:
-        ids = json.load(f)
-    co_authors_number = len(ids)
+        ids: list[str] = json.load(f)
+    co_authors_number: int = len(ids)
 
     with open(f'{output_folder}\\co_authors_to_search.json', 'r') as f:
-        ids = json.load(f)
-    co_authors_current = len(ids)
+        ids: list[str] = json.load(f)
+    co_authors_current: int = len(ids)
 
     progress = 0
     if exists:
         progress = round(100 * (co_authors_number - co_authors_current) / co_authors_number)
-        print(f'Total progress: {progress}%.')
+        print(f'Total progress: {progress}%. ({co_authors_number-co_authors_current}/{co_authors_number})')
 
     # here we use a copy of IDs list because we remove each iterated ID from the list.
     for co_author_id in ids[:]:
@@ -567,10 +512,10 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
         except FileExistsError:
             pass
         try:
-            co_author: gs.Author = gs.Author(co_author_id, get_co_authors=False)
+            co_author: gs.Author = gs.Author(co_author_id, get_co_authors=False, clip=clip)
         except:
             raise_max_requests_exceeded()
-        co_author.save_authors_paper_data_in_json( # NOQA, if code reaches here co_author var exists
+        co_author.save_authors_paper_data_in_json(  # NOQA, if code reaches here co_author var exists
             f'{output_folder}\\{co_author_id}\\{co_author.name.replace(" ", "_").lower()}_paper_data.json')
         co_author.save_authors_person_data_in_json(
             f'{output_folder}\\{co_author_id}\\{co_author.name.replace(" ", "_").lower()}_author_data.json')
@@ -580,7 +525,7 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
         with open(f'{output_folder}\\co_authors_to_search.json', 'w') as f:
             json.dump(ids, f)
         progress = round(100 * (co_authors_number - co_authors_current) / co_authors_number)
-        print(f'Total progress: {progress}%.')
+        print(f'Total progress: {progress}%. ({co_authors_number-co_authors_current}/{co_authors_number})')
 
     # when all data is fetched we remove useless json files from folder
     if int(progress) == 100:
@@ -591,5 +536,25 @@ def checkpoint_save_author_and_coauthors_in_tree(id: str, full_path: str = 'bar'
         if os.path.exists(co_authors_to_search_json):
             os.remove(co_authors_to_search_json)
 
-        print(f'{id} co-author tree saved successfully.')
+        print(f'{identifier} co-author tree saved successfully.')
+
+
+def _clean_author_name_for_plotting(name: str, last_name_only=True) -> str:
+    """
+    Takes an input string such as
+    Vandlopoulos K. Ioannis
+    and returns
+    VK Ioannis.
+    This is because in many cases there are duplicates of a name for no reason and in graph plotting and analysis
+    they are taken for 2 different authors.
+    :param last_name_only: return only last name
+    :param name: author name as fetched from scholar
+    :return: cleaned string
+    """
+    parts = name.split()
+    if last_name_only:
+        return parts[-1]
+    if len(parts) == 1:
+        return parts[0]
+    return "".join([p[0] for p in parts[:-1]]) + " " + parts[-1]
 
