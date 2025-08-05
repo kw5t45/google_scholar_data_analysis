@@ -279,11 +279,11 @@ print(weighted_citations)
 
 Example usage and output:
 ```py
-plot_co_author_graph(get_co_author_graph_pairs('unique_id')) # assuming unique_id is a folderthat exists 
+plot_co_author_graph(get_co_author_graph_pairs('erdos_id')) # assuming unique_id is a folderthat exists 
 # in working directory
->>> # here the graph is huge so I took a small screenshot. 
+>>> # this was a rather heavy computation. 
 ```
-![Sample Image](example_graph.png)
+![Sample Image](erdos_graph.png)
 
 
  #### **get_gamma_distribution_best_fit_parameters(cites_per_year_per_paper) -> Tuple** 
